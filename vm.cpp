@@ -7,6 +7,8 @@
 #include "compiler.h"
 #include "debug.h"
 
+#include <cstdarg>
+#include <cstdio>
 #include <iostream>
 
 InterpretResult VM::interpret(const std::string& source) {
@@ -26,12 +28,28 @@ InterpretResult VM::interpret(const std::string& source) {
 }
 
 InterpretResult VM::run() {
+#define READ_BYTE() readByte()
+#define READ_CONSTANT() readConstant()
+
+#define BINARY_OP(valueWrapper, op)                         \
+    do {                                                    \
+        if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {   \
+            runtimeError("Operands must be numbers.");      \
+            return INTERPRET_RUNTIME_ERROR;                 \
+        }                                                   \
+        double b = AS_NUMBER(pop());                        \
+        double a = AS_NUMBER(pop());                        \
+        push(valueWrapper(a op b));                         \
+    } while (false)
+
     for (;;) {
 #ifdef DEBUG_TRACE_EXECUTION
         std::cout << "          ";
 
         for (Value value : stack) {
-            std::cout << "[ " << value << " ]";
+            std::cout << "[ ";
+            printValue(value);
+            std::cout << " ]";
         }
 
         std::cout << "\n";
@@ -39,61 +57,87 @@ InterpretResult VM::run() {
         disassembleInstruction(*chunk, ip);
 #endif
 
-        uint8_t instruction = readByte();
+        uint8_t instruction = READ_BYTE();
 
         switch (instruction) {
             case OP_CONSTANT: {
-                Value constant = readConstant();
+                Value constant = READ_CONSTANT();
                 push(constant);
                 break;
             }
 
-            case OP_ADD: {
+            case OP_NIL:
+                push(NIL_VAL());
+                break;
+
+            case OP_TRUE:
+                push(BOOL_VAL(true));
+                break;
+
+            case OP_FALSE:
+                push(BOOL_VAL(false));
+                break;
+
+            case OP_EQUAL: {
                 Value b = pop();
                 Value a = pop();
-                push(a + b);
+                push(BOOL_VAL(valuesEqual(a, b)));
                 break;
             }
 
-            case OP_SUBTRACT: {
-                Value b = pop();
-                Value a = pop();
-                push(a - b);
+            case OP_GREATER:
+                BINARY_OP(BOOL_VAL, >);
                 break;
-            }
 
-            case OP_MULTIPLY: {
-                Value b = pop();
-                Value a = pop();
-                push(a * b);
+            case OP_LESS:
+                BINARY_OP(BOOL_VAL, <);
                 break;
-            }
 
-            case OP_DIVIDE: {
-                Value b = pop();
-                Value a = pop();
-                push(a / b);
+            case OP_ADD:
+                BINARY_OP(NUMBER_VAL, +);
                 break;
-            }
 
-            case OP_NEGATE: {
-                push(-pop());
+            case OP_SUBTRACT:
+                BINARY_OP(NUMBER_VAL, -);
                 break;
-            }
 
-            case OP_RETURN: {
-                std::cout << pop() << "\n";
+            case OP_MULTIPLY:
+                BINARY_OP(NUMBER_VAL, *);
+                break;
+
+            case OP_DIVIDE:
+                BINARY_OP(NUMBER_VAL, /);
+                break;
+
+            case OP_NOT:
+                push(BOOL_VAL(isFalsey(pop())));
+                break;
+
+            case OP_NEGATE:
+                if (!IS_NUMBER(peek(0))) {
+                    runtimeError("Operand must be a number.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                push(NUMBER_VAL(-AS_NUMBER(pop())));
+                break;
+
+            case OP_RETURN:
+                printValue(pop());
+                std::cout << "\n";
                 return INTERPRET_OK;
-            }
 
-            default: {
+            default:
                 std::cout << "Unknown opcode "
                           << static_cast<int>(instruction)
                           << "\n";
                 return INTERPRET_RUNTIME_ERROR;
-            }
         }
     }
+
+#undef READ_BYTE
+#undef READ_CONSTANT
+#undef BINARY_OP
 }
 
 uint8_t VM::readByte() {
@@ -112,4 +156,28 @@ Value VM::pop() {
     Value value = stack.back();
     stack.pop_back();
     return value;
+}
+
+Value VM::peek(int distance) const {
+    return stack[stack.size() - 1 - distance];
+}
+
+bool VM::isFalsey(Value value) const {
+    return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
+}
+
+void VM::runtimeError(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    std::vfprintf(stderr, format, args);
+    va_end(args);
+
+    std::fputs("\n", stderr);
+
+    int instruction = ip - 1;
+    int line = chunk->getLine(instruction);
+
+    std::fprintf(stderr, "[line %d] in script\n", line);
+
+    stack.clear();
 }

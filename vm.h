@@ -33,6 +33,10 @@ private:
 
     void push(Value value);
     Value pop();
+    Value peek(int distance) const;
+
+    bool isFalsey(Value value) const;
+    void runtimeError(const char* format, ...);
 };
 
 #endif
