@@ -11,4 +11,6 @@ add_executable(BytecodeVM main.cpp
         chunk.h
         debug.cpp
         debug.h
+        vm.cpp
+        vm.h
 )
