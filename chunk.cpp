@@ -8,6 +8,10 @@ void Chunk::write(uint8_t byte, int line) {
     lines.push_back(line);
 }
 
+void Chunk::setCode(int index, uint8_t byte) {
+    code[index] = byte;
+}
+
 int Chunk::addConstant(Value value) {
     constants.write(value);
     return constants.count() - 1;
@@ -27,8 +31,4 @@ int Chunk::getLine(int index) const {
 
 Value Chunk::getConstant(int index) const {
     return constants.get(index);
-}
-
-void Chunk::setCode(int index, uint8_t byte) {
-    code[index] = byte;
 }

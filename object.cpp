@@ -11,6 +11,12 @@
 static Obj* objects = nullptr;
 static Table strings;
 
+static void linkObject(Obj* object, ObjType type) {
+    object->type = type;
+    object->next = objects;
+    objects = object;
+}
+
 static uint32_t hashString(const char* key, int length) {
     uint32_t hash = 2166136261u;
 
@@ -22,20 +28,31 @@ static uint32_t hashString(const char* key, int length) {
     return hash;
 }
 
-static Obj* allocateObject(size_t size, ObjType type) {
-    Obj* object = reinterpret_cast<Obj*>(operator new(size));
+ObjFunction* newFunction() {
+    ObjFunction* function = new ObjFunction();
 
-    object->type = type;
-    object->next = objects;
-    objects = object;
+    linkObject(&function->obj, OBJ_FUNCTION);
 
-    return object;
+    function->arity = 0;
+    function->name = nullptr;
+
+    return function;
+}
+
+ObjNative* newNative(NativeFn function) {
+    ObjNative* native = new ObjNative();
+
+    linkObject(&native->obj, OBJ_NATIVE);
+
+    native->function = function;
+
+    return native;
 }
 
 static ObjString* allocateString(char* chars, int length, uint32_t hash) {
-    ObjString* string = reinterpret_cast<ObjString*>(
-        allocateObject(sizeof(ObjString), OBJ_STRING)
-    );
+    ObjString* string = new ObjString();
+
+    linkObject(&string->obj, OBJ_STRING);
 
     string->length = length;
     string->chars = chars;
@@ -76,8 +93,25 @@ ObjString* copyString(const char* chars, int length) {
     return allocateString(heapChars, length, hash);
 }
 
+static void printFunction(ObjFunction* function) {
+    if (function->name == nullptr) {
+        std::cout << "<script>";
+        return;
+    }
+
+    std::cout << "<fn " << function->name->chars << ">";
+}
+
 void printObject(Value value) {
     switch (OBJ_TYPE(value)) {
+        case OBJ_FUNCTION:
+            printFunction(AS_FUNCTION(value));
+            break;
+
+        case OBJ_NATIVE:
+            std::cout << "<native fn>";
+            break;
+
         case OBJ_STRING:
             std::cout << AS_CSTRING(value);
             break;
@@ -86,11 +120,23 @@ void printObject(Value value) {
 
 static void freeObject(Obj* object) {
     switch (object->type) {
+        case OBJ_FUNCTION: {
+            ObjFunction* function = reinterpret_cast<ObjFunction*>(object);
+            delete function;
+            break;
+        }
+
+        case OBJ_NATIVE: {
+            ObjNative* native = reinterpret_cast<ObjNative*>(object);
+            delete native;
+            break;
+        }
+
         case OBJ_STRING: {
             ObjString* string = reinterpret_cast<ObjString*>(object);
 
             delete[] string->chars;
-            operator delete(string);
+            delete string;
 
             break;
         }

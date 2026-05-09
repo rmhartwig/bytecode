@@ -11,35 +11,48 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <iostream>
+
+static Value clockNative(int argCount, Value* args) {
+    return NUMBER_VAL(static_cast<double>(std::clock()) / CLOCKS_PER_SEC);
+}
+
+VM::VM() {
+    defineNative("clock", clockNative);
+}
 
 VM::~VM() {
     globals.clear();
     freeObjects();
 }
 
-InterpretResult VM::interpret(const std::string& source) {
-    Chunk newChunk;
+void VM::resetStack() {
+    stack.clear();
+    frames.clear();
+}
 
-    if (!compile(source, newChunk)) {
+InterpretResult VM::interpret(const std::string& source) {
+    resetStack();
+
+    ObjFunction* function = compile(source);
+
+    if (function == nullptr) {
         return INTERPRET_COMPILE_ERROR;
     }
 
-    chunk = &newChunk;
-    ip = 0;
-    stack.clear();
+    push(OBJ_VAL(function));
 
-    InterpretResult result = run();
+    call(function, 0);
 
-    return result;
+    return run();
 }
 
 InterpretResult VM::run() {
 #define READ_BYTE() readByte()
+#define READ_SHORT() readShort()
 #define READ_CONSTANT() readConstant()
 #define READ_STRING() readString()
-#define READ_SHORT() \
-    static_cast<uint16_t>((READ_BYTE() << 8) | READ_BYTE())
 
 #define BINARY_OP(valueWrapper, op)                         \
     do {                                                    \
@@ -64,7 +77,8 @@ InterpretResult VM::run() {
 
         std::cout << "\n";
 
-        disassembleInstruction(*chunk, ip);
+        CallFrame& traceFrame = currentFrame();
+        disassembleInstruction(traceFrame.function->chunk, traceFrame.ip);
 #endif
 
         uint8_t instruction = READ_BYTE();
@@ -201,7 +215,7 @@ InterpretResult VM::run() {
 
             case OP_JUMP: {
                 uint16_t offset = READ_SHORT();
-                ip += offset;
+                currentFrame().ip += offset;
                 break;
             }
 
@@ -209,7 +223,7 @@ InterpretResult VM::run() {
                 uint16_t offset = READ_SHORT();
 
                 if (isFalsey(peek(0))) {
-                    ip += offset;
+                    currentFrame().ip += offset;
                 }
 
                 break;
@@ -217,12 +231,36 @@ InterpretResult VM::run() {
 
             case OP_LOOP: {
                 uint16_t offset = READ_SHORT();
-                ip -= offset;
+                currentFrame().ip -= offset;
                 break;
             }
 
-            case OP_RETURN:
-                return INTERPRET_OK;
+            case OP_CALL: {
+                int argCount = READ_BYTE();
+
+                if (!callValue(peek(argCount), argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                break;
+            }
+
+            case OP_RETURN: {
+                Value result = pop();
+
+                CallFrame finishedFrame = currentFrame();
+                frames.pop_back();
+
+                if (frames.empty()) {
+                    pop();
+                    return INTERPRET_OK;
+                }
+
+                stack.resize(finishedFrame.slotStart);
+                push(result);
+
+                break;
+            }
 
             default:
                 std::cout << "Unknown opcode "
@@ -233,18 +271,75 @@ InterpretResult VM::run() {
     }
 
 #undef READ_BYTE
+#undef READ_SHORT
 #undef READ_CONSTANT
 #undef READ_STRING
-#undef READ_SHORT
 #undef BINARY_OP
 }
 
+bool VM::call(ObjFunction* function, int argCount) {
+    if (argCount != function->arity) {
+        runtimeError("Expected %d arguments but got %d.",
+                     function->arity, argCount);
+        return false;
+    }
+
+    if (static_cast<int>(frames.size()) == FRAMES_MAX) {
+        runtimeError("Stack overflow.");
+        return false;
+    }
+
+    CallFrame frame;
+    frame.function = function;
+    frame.ip = 0;
+    frame.slotStart = static_cast<int>(stack.size()) - argCount - 1;
+
+    frames.push_back(frame);
+
+    return true;
+}
+
+bool VM::callValue(Value callee, int argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            case OBJ_FUNCTION:
+                return call(AS_FUNCTION(callee), argCount);
+
+            case OBJ_NATIVE: {
+                NativeFn native = AS_NATIVE(callee);
+
+                Value result = native(argCount, stack.data() + stack.size() - argCount);
+
+                stack.resize(stack.size() - argCount - 1);
+                push(result);
+
+                return true;
+            }
+
+            default:
+                break;
+        }
+    }
+
+    runtimeError("Can only call functions and classes.");
+    return false;
+}
+
 uint8_t VM::readByte() {
-    return chunk->getCode(ip++);
+    CallFrame& frame = currentFrame();
+    return frame.function->chunk.getCode(frame.ip++);
+}
+
+uint16_t VM::readShort() {
+    uint8_t high = readByte();
+    uint8_t low = readByte();
+
+    return static_cast<uint16_t>((high << 8) | low);
 }
 
 Value VM::readConstant() {
-    return chunk->getConstant(readByte());
+    CallFrame& frame = currentFrame();
+    return frame.function->chunk.getConstant(readByte());
 }
 
 ObjString* VM::readString() {
@@ -265,12 +360,18 @@ Value VM::peek(int distance) const {
     return stack[stack.size() - 1 - distance];
 }
 
+CallFrame& VM::currentFrame() {
+    return frames.back();
+}
+
 Value VM::getStackSlot(int slot) const {
-    return stack[slot];
+    const CallFrame& frame = frames.back();
+    return stack[frame.slotStart + slot];
 }
 
 void VM::setStackSlot(int slot, Value value) {
-    stack[slot] = value;
+    const CallFrame& frame = frames.back();
+    stack[frame.slotStart + slot] = value;
 }
 
 bool VM::isFalsey(Value value) const {
@@ -293,6 +394,19 @@ void VM::concatenate() {
     push(OBJ_VAL(result));
 }
 
+void VM::defineNative(const char* name, NativeFn function) {
+    push(OBJ_VAL(copyString(name, static_cast<int>(std::strlen(name)))));
+    push(OBJ_VAL(newNative(function)));
+
+    Value nativeValue = peek(0);
+    ObjString* nativeName = AS_STRING(peek(1));
+
+    globals.set(nativeName, nativeValue);
+
+    pop();
+    pop();
+}
+
 void VM::runtimeError(const char* format, ...) {
     va_list args;
     va_start(args, format);
@@ -301,10 +415,21 @@ void VM::runtimeError(const char* format, ...) {
 
     std::fputs("\n", stderr);
 
-    int instruction = ip - 1;
-    int line = chunk->getLine(instruction);
+    for (int i = static_cast<int>(frames.size()) - 1; i >= 0; i--) {
+        CallFrame& frame = frames[i];
+        ObjFunction* function = frame.function;
 
-    std::fprintf(stderr, "[line %d] in script\n", line);
+        int instruction = frame.ip - 1;
+        int line = function->chunk.getLine(instruction);
 
-    stack.clear();
+        std::fprintf(stderr, "[line %d] in ", line);
+
+        if (function->name == nullptr) {
+            std::fprintf(stderr, "script\n");
+        } else {
+            std::fprintf(stderr, "%s()\n", function->name->chars);
+        }
+    }
+
+    resetStack();
 }

@@ -4,11 +4,10 @@
 #ifndef CLOX_COMPILER_H
 #define CLOX_COMPILER_H
 
-#include "chunk.h"
 #include "object.h"
 
 #include <string>
 
-bool compile(const std::string& source, Chunk& chunk);
+ObjFunction* compile(const std::string& source);
 
 #endif

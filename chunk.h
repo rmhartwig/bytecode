@@ -42,14 +42,17 @@ enum OpCode {
     OP_JUMP_IF_FALSE,
     OP_LOOP,
 
+    OP_CALL,
+
     OP_RETURN
 };
 
 class Chunk {
 public:
     void write(uint8_t byte, int line);
-    int addConstant(Value value);
     void setCode(int index, uint8_t byte);
+
+    int addConstant(Value value);
 
     int count() const;
     uint8_t getCode(int index) const;
