@@ -8,10 +8,14 @@
 
 #include <vector>
 
+struct Obj;
+struct ObjString;
+
 enum ValueType {
     VAL_BOOL,
     VAL_NIL,
-    VAL_NUMBER
+    VAL_NUMBER,
+    VAL_OBJ
 };
 
 struct Value {
@@ -20,6 +24,7 @@ struct Value {
     union {
         bool boolean;
         double number;
+        Obj* obj;
     } as;
 };
 
@@ -35,12 +40,20 @@ inline bool IS_NUMBER(Value value) {
     return value.type == VAL_NUMBER;
 }
 
+inline bool IS_OBJ(Value value) {
+    return value.type == VAL_OBJ;
+}
+
 inline bool AS_BOOL(Value value) {
     return value.as.boolean;
 }
 
 inline double AS_NUMBER(Value value) {
     return value.as.number;
+}
+
+inline Obj* AS_OBJ(Value value) {
+    return value.as.obj;
 }
 
 inline Value BOOL_VAL(bool value) {
@@ -61,6 +74,14 @@ inline Value NUMBER_VAL(double value) {
     Value result;
     result.type = VAL_NUMBER;
     result.as.number = value;
+    return result;
+}
+
+template <typename T>
+inline Value OBJ_VAL(T* object) {
+    Value result;
+    result.type = VAL_OBJ;
+    result.as.obj = reinterpret_cast<Obj*>(object);
     return result;
 }
 

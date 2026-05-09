@@ -18,6 +18,8 @@ enum InterpretResult {
 
 class VM {
 public:
+    ~VM();
+
     InterpretResult interpret(const std::string& source);
 
 private:
@@ -36,6 +38,7 @@ private:
     Value peek(int distance) const;
 
     bool isFalsey(Value value) const;
+    void concatenate();
     void runtimeError(const char* format, ...);
 };
 

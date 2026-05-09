@@ -17,4 +17,6 @@ add_executable(BytecodeVM main.cpp
         compiler.h
         scanner.cpp
         scanner.h
+        object.cpp
+        object.h
 )

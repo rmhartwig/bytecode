@@ -6,10 +6,16 @@
 #include "common.h"
 #include "compiler.h"
 #include "debug.h"
+#include "object.h"
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
+
+VM::~VM() {
+    freeObjects();
+}
 
 InterpretResult VM::interpret(const std::string& source) {
     Chunk newChunk;
@@ -93,9 +99,20 @@ InterpretResult VM::run() {
                 BINARY_OP(BOOL_VAL, <);
                 break;
 
-            case OP_ADD:
-                BINARY_OP(NUMBER_VAL, +);
+            case OP_ADD: {
+                if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
+                    concatenate();
+                } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
+                    double b = AS_NUMBER(pop());
+                    double a = AS_NUMBER(pop());
+                    push(NUMBER_VAL(a + b));
+                } else {
+                    runtimeError("Operands must be two numbers or two strings.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
                 break;
+            }
 
             case OP_SUBTRACT:
                 BINARY_OP(NUMBER_VAL, -);
@@ -164,6 +181,22 @@ Value VM::peek(int distance) const {
 
 bool VM::isFalsey(Value value) const {
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
+}
+
+void VM::concatenate() {
+    ObjString* b = AS_STRING(pop());
+    ObjString* a = AS_STRING(pop());
+
+    int length = a->length + b->length;
+    char* chars = new char[length + 1];
+
+    std::memcpy(chars, a->chars, a->length);
+    std::memcpy(chars + a->length, b->chars, b->length);
+
+    chars[length] = '\0';
+
+    ObjString* result = takeString(chars, length);
+    push(OBJ_VAL(result));
 }
 
 void VM::runtimeError(const char* format, ...) {
