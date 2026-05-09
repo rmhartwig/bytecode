@@ -1,0 +1,33 @@
+//
+// Created by ryanh on 5/9/2026.
+//
+#ifndef CLOX_CHUNK_H
+#define CLOX_CHUNK_H
+
+#include "common.h"
+#include "value.h"
+
+#include <vector>
+
+enum OpCode {
+    OP_CONSTANT,
+    OP_RETURN
+};
+
+class Chunk {
+public:
+    void write(uint8_t byte, int line);
+    int addConstant(Value value);
+
+    int count() const;
+    uint8_t getCode(int index) const;
+    int getLine(int index) const;
+    Value getConstant(int index) const;
+
+private:
+    std::vector<uint8_t> code;
+    std::vector<int> lines;
+    ValueArray constants;
+};
+
+#endif
