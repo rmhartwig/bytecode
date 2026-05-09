@@ -28,3 +28,7 @@ int Chunk::getLine(int index) const {
 Value Chunk::getConstant(int index) const {
     return constants.get(index);
 }
+
+void Chunk::setCode(int index, uint8_t byte) {
+    code[index] = byte;
+}

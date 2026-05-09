@@ -143,6 +143,27 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
     emitByte(byte2);
 }
 
+static int emitJump(uint8_t instruction) {
+    emitByte(instruction);
+    emitByte(0xff);
+    emitByte(0xff);
+
+    return currentChunk()->count() - 2;
+}
+
+static void emitLoop(int loopStart) {
+    emitByte(OP_LOOP);
+
+    int offset = currentChunk()->count() - loopStart + 2;
+
+    if (offset > UINT16_MAX) {
+        error("Loop body too large.");
+    }
+
+    emitByte(static_cast<uint8_t>((offset >> 8) & 0xff));
+    emitByte(static_cast<uint8_t>(offset & 0xff));
+}
+
 static void emitReturn() {
     emitByte(OP_RETURN);
 }
@@ -160,6 +181,17 @@ static uint8_t makeConstant(Value value) {
 
 static void emitConstant(Value value) {
     emitBytes(OP_CONSTANT, makeConstant(value));
+}
+
+static void patchJump(int offset) {
+    int jump = currentChunk()->count() - offset - 2;
+
+    if (jump > UINT16_MAX) {
+        error("Too much code to jump over.");
+    }
+
+    currentChunk()->setCode(offset, static_cast<uint8_t>((jump >> 8) & 0xff));
+    currentChunk()->setCode(offset + 1, static_cast<uint8_t>(jump & 0xff));
 }
 
 static void initCompiler(Compiler* compiler) {
@@ -271,6 +303,28 @@ static void defineVariable(uint8_t global) {
     }
 
     emitBytes(OP_DEFINE_GLOBAL, global);
+}
+
+static void and_(bool canAssign) {
+    int endJump = emitJump(OP_JUMP_IF_FALSE);
+
+    emitByte(OP_POP);
+
+    parsePrecedence(PREC_AND);
+
+    patchJump(endJump);
+}
+
+static void or_(bool canAssign) {
+    int elseJump = emitJump(OP_JUMP_IF_FALSE);
+    int endJump = emitJump(OP_JUMP);
+
+    patchJump(elseJump);
+    emitByte(OP_POP);
+
+    parsePrecedence(PREC_OR);
+
+    patchJump(endJump);
 }
 
 static void number(bool canAssign) {
@@ -406,50 +460,50 @@ static void variable(bool canAssign) {
 }
 
 static ParseRule rules[] = {
-    {grouping, nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {unary,    binary,  PREC_TERM},
-    {nullptr,  binary,  PREC_TERM},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  binary,  PREC_FACTOR},
-    {nullptr,  binary,  PREC_FACTOR},
+    {grouping, nullptr, PREC_NONE},       // TOKEN_LEFT_PAREN
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_RIGHT_PAREN
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_LEFT_BRACE
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_RIGHT_BRACE
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_COMMA
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_DOT
+    {unary,    binary,  PREC_TERM},       // TOKEN_MINUS
+    {nullptr,  binary,  PREC_TERM},       // TOKEN_PLUS
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_SEMICOLON
+    {nullptr,  binary,  PREC_FACTOR},     // TOKEN_SLASH
+    {nullptr,  binary,  PREC_FACTOR},     // TOKEN_STAR
 
-    {unary,    nullptr, PREC_NONE},
-    {nullptr,  binary,  PREC_EQUALITY},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  binary,  PREC_EQUALITY},
-    {nullptr,  binary,  PREC_COMPARISON},
-    {nullptr,  binary,  PREC_COMPARISON},
-    {nullptr,  binary,  PREC_COMPARISON},
-    {nullptr,  binary,  PREC_COMPARISON},
+    {unary,    nullptr, PREC_NONE},       // TOKEN_BANG
+    {nullptr,  binary,  PREC_EQUALITY},   // TOKEN_BANG_EQUAL
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_EQUAL
+    {nullptr,  binary,  PREC_EQUALITY},   // TOKEN_EQUAL_EQUAL
+    {nullptr,  binary,  PREC_COMPARISON}, // TOKEN_GREATER
+    {nullptr,  binary,  PREC_COMPARISON}, // TOKEN_GREATER_EQUAL
+    {nullptr,  binary,  PREC_COMPARISON}, // TOKEN_LESS
+    {nullptr,  binary,  PREC_COMPARISON}, // TOKEN_LESS_EQUAL
 
-    {variable, nullptr, PREC_NONE},
-    {string,   nullptr, PREC_NONE},
-    {number,   nullptr, PREC_NONE},
+    {variable, nullptr, PREC_NONE},       // TOKEN_IDENTIFIER
+    {string,   nullptr, PREC_NONE},       // TOKEN_STRING
+    {number,   nullptr, PREC_NONE},       // TOKEN_NUMBER
 
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {literal,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {literal,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {literal,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
+    {nullptr,  and_,    PREC_AND},        // TOKEN_AND
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_CLASS
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_ELSE
+    {literal,  nullptr, PREC_NONE},       // TOKEN_FALSE
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_FOR
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_FUN
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_IF
+    {literal,  nullptr, PREC_NONE},       // TOKEN_NIL
+    {nullptr,  or_,     PREC_OR},         // TOKEN_OR
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_PRINT
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_RETURN
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_SUPER
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_THIS
+    {literal,  nullptr, PREC_NONE},       // TOKEN_TRUE
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_VAR
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_WHILE
 
-    {nullptr,  nullptr, PREC_NONE},
-    {nullptr,  nullptr, PREC_NONE},
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_ERROR
+    {nullptr,  nullptr, PREC_NONE},       // TOKEN_EOF
 };
 
 static ParseRule* getRule(TokenType type) {
@@ -510,6 +564,111 @@ static void expressionStatement() {
     emitByte(OP_POP);
 }
 
+static void ifStatement() {
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
+
+    expression();
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+    int thenJump = emitJump(OP_JUMP_IF_FALSE);
+
+    emitByte(OP_POP);
+
+    statement();
+
+    int elseJump = emitJump(OP_JUMP);
+
+    patchJump(thenJump);
+
+    emitByte(OP_POP);
+
+    if (match(TOKEN_ELSE)) {
+        statement();
+    }
+
+    patchJump(elseJump);
+}
+
+static void whileStatement() {
+    int loopStart = currentChunk()->count();
+
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
+
+    expression();
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+    int exitJump = emitJump(OP_JUMP_IF_FALSE);
+
+    emitByte(OP_POP);
+
+    statement();
+
+    emitLoop(loopStart);
+
+    patchJump(exitJump);
+
+    emitByte(OP_POP);
+}
+
+static void forStatement() {
+    beginScope();
+
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
+
+    if (match(TOKEN_SEMICOLON)) {
+        // No initializer.
+    } else if (match(TOKEN_VAR)) {
+        varDeclaration();
+    } else {
+        expressionStatement();
+    }
+
+    int loopStart = currentChunk()->count();
+
+    int exitJump = -1;
+
+    if (!match(TOKEN_SEMICOLON)) {
+        expression();
+
+        consume(TOKEN_SEMICOLON, "Expect ';' after loop condition.");
+
+        exitJump = emitJump(OP_JUMP_IF_FALSE);
+
+        emitByte(OP_POP);
+    }
+
+    if (!match(TOKEN_RIGHT_PAREN)) {
+        int bodyJump = emitJump(OP_JUMP);
+
+        int incrementStart = currentChunk()->count();
+
+        expression();
+
+        emitByte(OP_POP);
+
+        consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+
+        emitLoop(loopStart);
+
+        loopStart = incrementStart;
+
+        patchJump(bodyJump);
+    }
+
+    statement();
+
+    emitLoop(loopStart);
+
+    if (exitJump != -1) {
+        patchJump(exitJump);
+        emitByte(OP_POP);
+    }
+
+    endScope();
+}
+
 static void synchronize() {
     parser.panicMode = false;
 
@@ -538,6 +697,12 @@ static void synchronize() {
 static void statement() {
     if (match(TOKEN_PRINT)) {
         printStatement();
+    } else if (match(TOKEN_FOR)) {
+        forStatement();
+    } else if (match(TOKEN_IF)) {
+        ifStatement();
+    } else if (match(TOKEN_WHILE)) {
+        whileStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
         beginScope();
         block();

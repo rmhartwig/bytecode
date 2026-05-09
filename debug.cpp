@@ -23,6 +23,19 @@ static int byteInstruction(const char* name, const Chunk& chunk, int offset) {
     return offset + 2;
 }
 
+static int jumpInstruction(const char* name, int sign, const Chunk& chunk, int offset) {
+    uint16_t jump = static_cast<uint16_t>(chunk.getCode(offset + 1) << 8);
+    jump |= chunk.getCode(offset + 2);
+
+    std::cout << std::left << std::setw(16) << name
+              << std::right << std::setw(4) << offset
+              << " -> "
+              << offset + 3 + sign * jump
+              << "\n";
+
+    return offset + 3;
+}
+
 static int constantInstruction(const char* name, const Chunk& chunk, int offset) {
     uint8_t constant = chunk.getCode(offset + 1);
 
@@ -117,6 +130,15 @@ int disassembleInstruction(const Chunk& chunk, int offset) {
 
         case OP_PRINT:
             return simpleInstruction("OP_PRINT", offset);
+
+        case OP_JUMP:
+            return jumpInstruction("OP_JUMP", 1, chunk, offset);
+
+        case OP_JUMP_IF_FALSE:
+            return jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset);
+
+        case OP_LOOP:
+            return jumpInstruction("OP_LOOP", -1, chunk, offset);
 
         case OP_RETURN:
             return simpleInstruction("OP_RETURN", offset);
