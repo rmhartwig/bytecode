@@ -14,6 +14,7 @@
 #include <iostream>
 
 VM::~VM() {
+    globals.clear();
     freeObjects();
 }
 
@@ -36,6 +37,7 @@ InterpretResult VM::interpret(const std::string& source) {
 InterpretResult VM::run() {
 #define READ_BYTE() readByte()
 #define READ_CONSTANT() readConstant()
+#define READ_STRING() readString()
 
 #define BINARY_OP(valueWrapper, op)                         \
     do {                                                    \
@@ -83,6 +85,45 @@ InterpretResult VM::run() {
             case OP_FALSE:
                 push(BOOL_VAL(false));
                 break;
+
+            case OP_POP:
+                pop();
+                break;
+
+            case OP_GET_GLOBAL: {
+                ObjString* name = READ_STRING();
+
+                Value value;
+                if (!globals.get(name, &value)) {
+                    runtimeError("Undefined variable '%s'.", name->chars);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                push(value);
+                break;
+            }
+
+            case OP_DEFINE_GLOBAL: {
+                ObjString* name = READ_STRING();
+
+                globals.set(name, peek(0));
+                pop();
+
+                break;
+            }
+
+            case OP_SET_GLOBAL: {
+                ObjString* name = READ_STRING();
+
+                if (globals.set(name, peek(0))) {
+                    globals.remove(name);
+
+                    runtimeError("Undefined variable '%s'.", name->chars);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                break;
+            }
 
             case OP_EQUAL: {
                 Value b = pop();
@@ -139,9 +180,12 @@ InterpretResult VM::run() {
                 push(NUMBER_VAL(-AS_NUMBER(pop())));
                 break;
 
-            case OP_RETURN:
+            case OP_PRINT:
                 printValue(pop());
                 std::cout << "\n";
+                break;
+
+            case OP_RETURN:
                 return INTERPRET_OK;
 
             default:
@@ -154,6 +198,7 @@ InterpretResult VM::run() {
 
 #undef READ_BYTE
 #undef READ_CONSTANT
+#undef READ_STRING
 #undef BINARY_OP
 }
 
@@ -163,6 +208,10 @@ uint8_t VM::readByte() {
 
 Value VM::readConstant() {
     return chunk->getConstant(readByte());
+}
+
+ObjString* VM::readString() {
+    return AS_STRING(readConstant());
 }
 
 void VM::push(Value value) {

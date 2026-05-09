@@ -5,6 +5,7 @@
 #define CLOX_VM_H
 
 #include "chunk.h"
+#include "table.h"
 #include "value.h"
 
 #include <string>
@@ -28,10 +29,13 @@ private:
 
     std::vector<Value> stack;
 
+    Table globals;
+
     InterpretResult run();
 
     uint8_t readByte();
     Value readConstant();
+    ObjString* readString();
 
     void push(Value value);
     Value pop();

@@ -107,7 +107,6 @@ Token Scanner::string() {
         return errorToken("Unterminated string.");
     }
 
-    // Closing quote.
     advance();
 
     return makeToken(TOKEN_STRING);
@@ -118,9 +117,7 @@ Token Scanner::number() {
         advance();
     }
 
-    // Look for a fractional part.
     if (peek() == '.' && isDigit(peekNext())) {
-        // Consume the dot.
         advance();
 
         while (isDigit(peek())) {

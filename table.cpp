@@ -19,10 +19,8 @@ Entry* Table::findEntry(std::vector<Entry>& bucketArray, ObjString* key) {
 
         if (entry->key == nullptr) {
             if (IS_NIL(entry->value)) {
-                // Empty entry.
                 return tombstone != nullptr ? tombstone : entry;
             } else {
-                // Tombstone.
                 if (tombstone == nullptr) {
                     tombstone = entry;
                 }
@@ -98,7 +96,6 @@ bool Table::remove(ObjString* key) {
         return false;
     }
 
-    // Place a tombstone.
     entry->key = nullptr;
     entry->value = BOOL_VAL(true);
 
@@ -122,7 +119,6 @@ ObjString* Table::findString(const char* chars, int length, uint32_t hash) {
         Entry* entry = &entries[index];
 
         if (entry->key == nullptr) {
-            // Stop if this is a real empty entry, not a tombstone.
             if (IS_NIL(entry->value)) {
                 return nullptr;
             }
