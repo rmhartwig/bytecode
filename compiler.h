@@ -4,8 +4,10 @@
 #ifndef CLOX_COMPILER_H
 #define CLOX_COMPILER_H
 
+#include "chunk.h"
+
 #include <string>
 
-void compile(const std::string& source);
+bool compile(const std::string& source, Chunk& chunk);
 
 #endif

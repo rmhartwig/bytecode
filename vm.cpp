@@ -10,8 +10,19 @@
 #include <iostream>
 
 InterpretResult VM::interpret(const std::string& source) {
-    compile(source);
-    return INTERPRET_OK;
+    Chunk newChunk;
+
+    if (!compile(source, newChunk)) {
+        return INTERPRET_COMPILE_ERROR;
+    }
+
+    chunk = &newChunk;
+    ip = 0;
+    stack.clear();
+
+    InterpretResult result = run();
+
+    return result;
 }
 
 InterpretResult VM::run() {
@@ -75,9 +86,12 @@ InterpretResult VM::run() {
                 return INTERPRET_OK;
             }
 
-            default:
-                std::cout << "Unknown opcode " << static_cast<int>(instruction) << "\n";
+            default: {
+                std::cout << "Unknown opcode "
+                          << static_cast<int>(instruction)
+                          << "\n";
                 return INTERPRET_RUNTIME_ERROR;
+            }
         }
     }
 }
