@@ -41,6 +41,9 @@ private:
     Value pop();
     Value peek(int distance) const;
 
+    Value getStackSlot(int slot) const;
+    void setStackSlot(int slot, Value value);
+
     bool isFalsey(Value value) const;
     void concatenate();
     void runtimeError(const char* format, ...);

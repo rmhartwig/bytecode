@@ -13,6 +13,16 @@ static int simpleInstruction(const char* name, int offset) {
     return offset + 1;
 }
 
+static int byteInstruction(const char* name, const Chunk& chunk, int offset) {
+    uint8_t slot = chunk.getCode(offset + 1);
+
+    std::cout << std::left << std::setw(16) << name
+              << std::right << std::setw(4) << static_cast<int>(slot)
+              << "\n";
+
+    return offset + 2;
+}
+
 static int constantInstruction(const char* name, const Chunk& chunk, int offset) {
     uint8_t constant = chunk.getCode(offset + 1);
 
@@ -62,6 +72,12 @@ int disassembleInstruction(const Chunk& chunk, int offset) {
 
         case OP_POP:
             return simpleInstruction("OP_POP", offset);
+
+        case OP_GET_LOCAL:
+            return byteInstruction("OP_GET_LOCAL", chunk, offset);
+
+        case OP_SET_LOCAL:
+            return byteInstruction("OP_SET_LOCAL", chunk, offset);
 
         case OP_GET_GLOBAL:
             return constantInstruction("OP_GET_GLOBAL", chunk, offset);
