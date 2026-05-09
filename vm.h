@@ -7,6 +7,7 @@
 #include "chunk.h"
 #include "value.h"
 
+#include <string>
 #include <vector>
 
 enum InterpretResult {
@@ -17,7 +18,7 @@ enum InterpretResult {
 
 class VM {
 public:
-    InterpretResult interpret(const Chunk& chunk);
+    InterpretResult interpret(const std::string& source);
 
 private:
     const Chunk* chunk = nullptr;

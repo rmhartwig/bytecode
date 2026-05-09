@@ -1,0 +1,3 @@
+print 1 + 2;
+// this is a comment
+var name = "BytecodeVM";

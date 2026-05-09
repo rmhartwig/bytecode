@@ -4,16 +4,14 @@
 #include "vm.h"
 
 #include "common.h"
+#include "compiler.h"
 #include "debug.h"
 
 #include <iostream>
 
-InterpretResult VM::interpret(const Chunk& newChunk) {
-    chunk = &newChunk;
-    ip = 0;
-    stack.clear();
-
-    return run();
+InterpretResult VM::interpret(const std::string& source) {
+    compile(source);
+    return INTERPRET_OK;
 }
 
 InterpretResult VM::run() {

@@ -1,34 +1,65 @@
-#include "chunk.h"
-#include "debug.h"
 #include "vm.h"
 
-int main(int argc, const char* argv[]) {
-    Chunk chunk;
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
 
-    int constant = chunk.addConstant(1.2);
-    chunk.write(OP_CONSTANT, 123);
-    chunk.write(static_cast<uint8_t>(constant), 123);
-
-    constant = chunk.addConstant(3.4);
-    chunk.write(OP_CONSTANT, 123);
-    chunk.write(static_cast<uint8_t>(constant), 123);
-
-    chunk.write(OP_ADD, 123);
-
-    constant = chunk.addConstant(5.6);
-    chunk.write(OP_CONSTANT, 123);
-    chunk.write(static_cast<uint8_t>(constant), 123);
-
-    chunk.write(OP_DIVIDE, 123);
-
-    chunk.write(OP_NEGATE, 123);
-
-    chunk.write(OP_RETURN, 123);
-
-    disassembleChunk(chunk, "test chunk");
-
+static void repl() {
     VM vm;
-    vm.interpret(chunk);
+    std::string line;
+
+    for (;;) {
+        std::cout << "> ";
+
+        if (!std::getline(std::cin, line)) {
+            std::cout << "\n";
+            break;
+        }
+
+        vm.interpret(line);
+    }
+}
+
+static std::string readFile(const char* path) {
+    std::ifstream file(path, std::ios::binary);
+
+    if (!file) {
+        std::cerr << "Could not open file \"" << path << "\".\n";
+        std::exit(74);
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+
+    if (file.bad()) {
+        std::cerr << "Could not read file \"" << path << "\".\n";
+        std::exit(74);
+    }
+
+    return buffer.str();
+}
+
+static void runFile(const char* path) {
+    VM vm;
+
+    std::string source = readFile(path);
+    InterpretResult result = vm.interpret(source);
+
+    if (result == INTERPRET_COMPILE_ERROR) std::exit(65);
+    if (result == INTERPRET_RUNTIME_ERROR) std::exit(70);
+}
+
+int main(int argc, const char* argv[]) {
+    if (argc == 1) {
+        repl();
+    } else if (argc == 2) {
+        runFile(argv[1]);
+    } else {
+        std::cerr << "Usage: BytecodeVM [path]\n";
+        std::exit(64);
+    }
 
     return 0;
 }
