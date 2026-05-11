@@ -3,6 +3,7 @@
 //
 #include "debug.h"
 
+#include "object.h"
 #include "value.h"
 
 #include <iomanip>
@@ -101,6 +102,12 @@ int disassembleInstruction(const Chunk& chunk, int offset) {
         case OP_SET_GLOBAL:
             return constantInstruction("OP_SET_GLOBAL", chunk, offset);
 
+        case OP_GET_UPVALUE:
+            return byteInstruction("OP_GET_UPVALUE", chunk, offset);
+
+        case OP_SET_UPVALUE:
+            return byteInstruction("OP_SET_UPVALUE", chunk, offset);
+
         case OP_EQUAL:
             return simpleInstruction("OP_EQUAL", offset);
 
@@ -142,6 +149,41 @@ int disassembleInstruction(const Chunk& chunk, int offset) {
 
         case OP_CALL:
             return byteInstruction("OP_CALL", chunk, offset);
+
+        case OP_CLOSURE: {
+            offset++;
+
+            uint8_t constant = chunk.getCode(offset++);
+
+            std::cout << std::left << std::setw(16) << "OP_CLOSURE"
+                      << std::right << std::setw(4)
+                      << static_cast<int>(constant)
+                      << " ";
+
+            printValue(chunk.getConstant(constant));
+            std::cout << "\n";
+
+            ObjFunction* function = AS_FUNCTION(chunk.getConstant(constant));
+
+            for (int j = 0; j < function->upvalueCount; j++) {
+                int isLocal = chunk.getCode(offset++);
+                int index = chunk.getCode(offset++);
+
+                std::cout << std::setfill('0') << std::setw(4)
+                          << offset - 2 << " ";
+                std::cout << std::setfill(' ');
+
+                std::cout << "   |                     "
+                          << (isLocal ? "local " : "upvalue ")
+                          << index
+                          << "\n";
+            }
+
+            return offset;
+        }
+
+        case OP_CLOSE_UPVALUE:
+            return simpleInstruction("OP_CLOSE_UPVALUE", offset);
 
         case OP_RETURN:
             return simpleInstruction("OP_RETURN", offset);

@@ -28,12 +28,35 @@ static uint32_t hashString(const char* key, int length) {
     return hash;
 }
 
+ObjClosure* newClosure(ObjFunction* function) {
+    ObjUpvalue** upvalues = nullptr;
+
+    if (function->upvalueCount > 0) {
+        upvalues = new ObjUpvalue*[function->upvalueCount];
+
+        for (int i = 0; i < function->upvalueCount; i++) {
+            upvalues[i] = nullptr;
+        }
+    }
+
+    ObjClosure* closure = new ObjClosure();
+
+    linkObject(&closure->obj, OBJ_CLOSURE);
+
+    closure->function = function;
+    closure->upvalues = upvalues;
+    closure->upvalueCount = function->upvalueCount;
+
+    return closure;
+}
+
 ObjFunction* newFunction() {
     ObjFunction* function = new ObjFunction();
 
     linkObject(&function->obj, OBJ_FUNCTION);
 
     function->arity = 0;
+    function->upvalueCount = 0;
     function->name = nullptr;
 
     return function;
@@ -47,6 +70,18 @@ ObjNative* newNative(NativeFn function) {
     native->function = function;
 
     return native;
+}
+
+ObjUpvalue* newUpvalue(Value* slot) {
+    ObjUpvalue* upvalue = new ObjUpvalue();
+
+    linkObject(&upvalue->obj, OBJ_UPVALUE);
+
+    upvalue->location = slot;
+    upvalue->closed = NIL_VAL();
+    upvalue->next = nullptr;
+
+    return upvalue;
 }
 
 static ObjString* allocateString(char* chars, int length, uint32_t hash) {
@@ -104,6 +139,10 @@ static void printFunction(ObjFunction* function) {
 
 void printObject(Value value) {
     switch (OBJ_TYPE(value)) {
+        case OBJ_CLOSURE:
+            printFunction(AS_CLOSURE(value)->function);
+            break;
+
         case OBJ_FUNCTION:
             printFunction(AS_FUNCTION(value));
             break;
@@ -115,11 +154,22 @@ void printObject(Value value) {
         case OBJ_STRING:
             std::cout << AS_CSTRING(value);
             break;
+
+        case OBJ_UPVALUE:
+            std::cout << "upvalue";
+            break;
     }
 }
 
 static void freeObject(Obj* object) {
     switch (object->type) {
+        case OBJ_CLOSURE: {
+            ObjClosure* closure = reinterpret_cast<ObjClosure*>(object);
+            delete[] closure->upvalues;
+            delete closure;
+            break;
+        }
+
         case OBJ_FUNCTION: {
             ObjFunction* function = reinterpret_cast<ObjFunction*>(object);
             delete function;
@@ -138,6 +188,12 @@ static void freeObject(Obj* object) {
             delete[] string->chars;
             delete string;
 
+            break;
+        }
+
+        case OBJ_UPVALUE: {
+            ObjUpvalue* upvalue = reinterpret_cast<ObjUpvalue*>(object);
+            delete upvalue;
             break;
         }
     }

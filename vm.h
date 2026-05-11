@@ -13,6 +13,7 @@
 #include <vector>
 
 #define FRAMES_MAX 64
+#define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
 
 enum InterpretResult {
     INTERPRET_OK,
@@ -21,7 +22,7 @@ enum InterpretResult {
 };
 
 struct CallFrame {
-    ObjFunction* function = nullptr;
+    ObjClosure* closure = nullptr;
     int ip = 0;
     int slotStart = 0;
 };
@@ -38,11 +39,15 @@ private:
     std::vector<CallFrame> frames;
 
     Table globals;
+    ObjUpvalue* openUpvalues = nullptr;
 
     InterpretResult run();
 
-    bool call(ObjFunction* function, int argCount);
+    bool call(ObjClosure* closure, int argCount);
     bool callValue(Value callee, int argCount);
+
+    ObjUpvalue* captureUpvalue(Value* local);
+    void closeUpvalues(Value* last);
 
     uint8_t readByte();
     uint16_t readShort();
